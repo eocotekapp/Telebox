@@ -14,6 +14,48 @@ function json(res, status, data) {
   res.end(JSON.stringify(data, null, 2));
 }
 function maskUrl(u){ return String(u).replace(TOKEN, '***TOKEN***'); }
+
+function uniq(arr){ return [...new Set(arr.filter(Boolean).map(x=>String(x).trim()))]; }
+function unescapeHtml(s){ return String(s).replace(/&amp;/g,'&').replace(/\\u002F/g,'/').replace(/\//g,'/'); }
+function guessPublicLinks(shareToken){
+  if(!shareToken) return [];
+  return uniq([
+    `https://www.telebox.online/s/${shareToken}`,
+    `https://www.telebox.online/share/${shareToken}`,
+    `https://www.telebox.online/web/share?shareToken=${shareToken}`,
+    `https://www.telebox.online/sharing/link?surl=${shareToken}`,
+  ]);
+}
+async function fetchTextSafe(url){
+  try{
+    const r=await fetch(url,{redirect:'follow',headers:{'user-agent':'Mozilla/5.0 TeleBoxDirectLinkFinder/1.0'}});
+    const text=await r.text();
+    return {url,httpStatus:r.status,contentType:r.headers.get('content-type')||'',finalUrl:r.url,text:text.slice(0,350000)};
+  }catch(e){ return {url,error:String(e?.message||e)}; }
+}
+function extractUrls(text){
+  const raw=unescapeHtml(text||'');
+  const urls=[];
+  const re=/https?:\\?\/\\?\/[^\s"'<>)}\\]+/g;
+  let m;
+  while((m=re.exec(raw))){
+    let u=m[0].replace(/\\\//g,'/').replace(/\\u002F/g,'/');
+    u=u.replace(/[\\"'\],;]+$/g,'');
+    urls.push(u);
+  }
+  return uniq(urls);
+}
+function classifyLink(u){
+  const x=String(u).toLowerCase();
+  if(/\.(m3u8)(\?|$)/.test(x)) return 'video stream m3u8';
+  if(/\.(mp4|mov|mkv|webm|avi)(\?|$)/.test(x)) return 'video direct/preview';
+  if(/\.(jpg|jpeg|png|webp|gif|heic)(\?|$)/.test(x)) return 'image direct/preview';
+  if(/\.(zip|rar|7z|apk|ipa|pdf|docx?|xlsx?)(\?|$)/.test(x)) return 'file direct';
+  if(x.includes('nuplink') || x.includes('fuplink')) return 'TeleBox CDN candidate';
+  if(x.includes('telebox.online')) return 'TeleBox page/API';
+  return 'other';
+}
+
 async function callTelebox(endpoint, params = {}, method = 'GET') {
   const url = new URL(BASE + endpoint);
   for (const [k, v] of Object.entries({ ...params, token: TOKEN })) {
@@ -97,6 +139,43 @@ export default async function handler(req, res) {
       const expire_enum = url.searchParams.get('expire_enum') || '4';
       const result = await callTelebox('/file_share', { itemIds, expire_enum });
       return json(res, 200, result);
+    }
+
+
+    if (action === 'directFile') {
+      const itemId = url.searchParams.get('itemId');
+      const cover = url.searchParams.get('cover') || '';
+      const itemIdPublic = url.searchParams.get('item_id') || '';
+      const name = url.searchParams.get('name') || '';
+      if (!itemId) return json(res, 400, { ok:false, msg:'Thiếu itemId' });
+
+      const share = await callTelebox('/file_share', { itemIds:itemId, expire_enum:4 });
+      const shareToken = share?.body?.data?.shareToken || '';
+      const sharePages = guessPublicLinks(shareToken);
+      const initialLinks = [];
+      if (cover) initialLinks.push(cover);
+      for (const u of sharePages) initialLinks.push(u);
+
+      const fetched = [];
+      const extracted = [];
+      for (const page of sharePages.slice(0,4)) {
+        const f = await fetchTextSafe(page);
+        fetched.push({ url:f.url, finalUrl:f.finalUrl, httpStatus:f.httpStatus, contentType:f.contentType, error:f.error, sample:f.text ? f.text.slice(0,800) : '' });
+        if (f.text) extracted.push(...extractUrls(f.text));
+      }
+      const allLinks = uniq([...initialLinks, ...extracted]).map(u => ({ url:u, kind:classifyLink(u) }));
+      const directCandidates = allLinks.filter(x => !x.url.includes('/api/open/') && (x.kind.includes('direct') || x.kind.includes('stream') || x.kind.includes('CDN') || x.url === cover));
+      return json(res, 200, {
+        ok:true,
+        note:'TeleBox public API docs chỉ có shareToken, không ghi endpoint download trực tiếp. Kết quả dưới đây là link tìm được từ cover/share page; link video/file thật phụ thuộc TeleBox có nhúng URL trong trang share hay không.',
+        item:{ itemId, item_id:itemIdPublic, name, cover },
+        share,
+        shareToken,
+        sharePages,
+        directCandidates,
+        allLinks,
+        fetched
+      });
     }
 
     if (action === 'shareFolder') {

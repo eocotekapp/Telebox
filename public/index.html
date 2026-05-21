@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c1224" />
+  <title>TeleBox Drive</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">TeleBox Drive</p>
+        <h1>Kho lưu trữ của bạn</h1>
+        <p class="sub">Dễ dùng như Drive: chọn thư mục, upload, tìm kiếm, đổi tên, chia sẻ.</p>
+      </div>
+      <button id="refreshBtn" class="icon-btn" type="button" title="Làm mới">↻</button>
+    </header>
+
+    <section class="quick-card">
+      <div class="folder-line">
+        <span class="folder-icon">📁</span>
+        <div>
+          <span class="label">Thư mục đang chọn</span>
+          <strong id="currentFolderName">Root</strong>
+        </div>
+      </div>
+      <select id="folderSelect" aria-label="Chọn thư mục">
+        <option value="0">📁 Root - ngoài cùng</option>
+      </select>
+      <p id="statusText" class="hint">Đang kiểm tra kết nối...</p>
+    </section>
+
+    <nav class="tabs" aria-label="Chức năng">
+      <button class="tab active" data-tab="upload">⬆️ Upload</button>
+      <button class="tab" data-tab="files">🗂️ File</button>
+      <button class="tab" data-tab="folder">➕ Folder</button>
+      <button class="tab" data-tab="tools">⚙️ Công cụ</button>
+    </nav>
+
+    <section id="upload" class="panel active">
+      <form id="uploadForm" class="card">
+        <h2>Upload file</h2>
+        <p class="hint">File sẽ được lưu vào thư mục đang chọn ở trên.</p>
+
+        <label class="drop-zone" for="fileInput">
+          <input id="fileInput" name="file" type="file" required />
+          <span class="drop-icon">☁️</span>
+          <strong id="fileNameText">Chạm để chọn file</strong>
+          <small>Ảnh, video, PDF, zip... đều được</small>
+        </label>
+
+        <label class="field-label">Tên lưu trên TeleBox</label>
+        <input id="diyNameInput" name="diyName" placeholder="Bỏ trống để giữ tên gốc" />
+        <input id="uploadPid" name="pid" type="hidden" value="0" />
+
+        <div class="progress-wrap hidden" id="progressWrap">
+          <div class="progress"><span id="progressBar"></span></div>
+          <small id="progressText">Đang upload...</small>
+        </div>
+
+        <button class="primary" type="submit">Upload vào thư mục này</button>
+      </form>
+    </section>
+
+    <section id="files" class="panel">
+      <div class="card">
+        <div class="section-head">
+          <div>
+            <h2>Quản lý file</h2>
+            <p class="hint">Tìm trong thư mục đang chọn. Để trống từ khóa để xem danh sách nếu API cho phép.</p>
+          </div>
+        </div>
+        <form id="searchForm" class="search-row">
+          <input id="searchInput" name="name" placeholder="Tìm tên file hoặc folder..." />
+          <button type="submit">Tìm</button>
+        </form>
+        <div id="results" class="file-grid"></div>
+      </div>
+    </section>
+
+    <section id="folder" class="panel">
+      <form id="folderForm" class="card">
+        <h2>Tạo thư mục mới</h2>
+        <p class="hint">Thư mục mới sẽ nằm trong thư mục đang chọn ở trên.</p>
+        <input id="folderPid" name="pid" type="hidden" value="0" />
+        <label class="field-label">Tên thư mục</label>
+        <input name="name" placeholder="Ví dụ: Ảnh món ăn" required />
+        <label class="field-label">Mô tả</label>
+        <input name="desc" placeholder="Không bắt buộc" />
+        <button class="primary" type="submit">Tạo thư mục</button>
+      </form>
+    </section>
+
+    <section id="tools" class="panel">
+      <div class="card tools-card">
+        <h2>Công cụ nhanh</h2>
+        <details open>
+          <summary>🔗 Share file / folder bằng ID</summary>
+          <form id="shareForm" class="mini-form">
+            <select name="kind">
+              <option value="file">File</option>
+              <option value="folder">Folder</option>
+            </select>
+            <input name="id" placeholder="Nhập ID" required />
+            <select name="expire_enum">
+              <option value="4">Vĩnh viễn</option>
+              <option value="3">30 ngày</option>
+              <option value="2">7 ngày</option>
+              <option value="1">24 giờ</option>
+            </select>
+            <button type="submit">Tạo link</button>
+          </form>
+        </details>
+
+        <details>
+          <summary>✏️ Đổi tên file bằng ID</summary>
+          <form id="renameForm" class="mini-form">
+            <input name="id" placeholder="File ID" required />
+            <input name="name" placeholder="Tên mới" required />
+            <button type="submit">Đổi tên</button>
+          </form>
+        </details>
+
+        <details>
+          <summary>🗑️ Xóa file / folder bằng ID</summary>
+          <form id="deleteForm" class="mini-form">
+            <select name="kind">
+              <option value="file">File</option>
+              <option value="folder">Folder</option>
+            </select>
+            <input name="id" placeholder="ID, nhiều ID cách nhau bằng dấu phẩy" required />
+            <button class="danger" type="submit">Xóa</button>
+          </form>
+        </details>
+      </div>
+    </section>
+
+    <section class="card log-card">
+      <button id="toggleLog" class="ghost" type="button">Hiện log kỹ thuật</button>
+      <pre id="log" class="hidden">Sẵn sàng.</pre>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

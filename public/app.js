@@ -1,232 +1,133 @@
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => [...document.querySelectorAll(sel)];
+const $ = s => document.querySelector(s);
+const itemsBox = $('#items');
+const logBox = $('#log');
+const toastBox = $('#toast');
+const folderSelects = [$('#uploadFolder'), $('#createFolderParent')];
+let currentFolder = { id: '0', name: 'Root' };
+let folderOptions = [{ id: '0', name: '📁 Root' }];
+let historyStack = [{ id: '0', name: 'Root' }];
 
-const state = { folderId: '0', folderName: 'Root', folders: [{ id: '0', name: 'Root', isFolder: true }] };
+function toast(msg){ toastBox.textContent = msg; toastBox.classList.add('show'); setTimeout(()=>toastBox.classList.remove('show'), 2300); }
+function log(data){
+  const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  logBox.textContent = text && text !== '{}' ? text : 'Không có chi tiết lỗi từ server. Bấm nút Kiểm tra API để xem TeleBox/Vercel trả gì.';
+}
+function esc(s=''){ return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+function fmtSize(v){ const n=Number(v); if(!n) return ''; const u=['B','KB','MB','GB']; let i=0,x=n; while(x>1024&&i<u.length-1){x/=1024;i++} return `${x.toFixed(i?1:0)} ${u[i]}`; }
 
-function log(data) {
-  $('#log').textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-}
-function toast(message, type = 'ok') {
-  const box = $('#toast');
-  box.textContent = message;
-  box.style.borderColor = type === 'bad' ? 'rgba(255,109,122,.55)' : 'rgba(100,216,255,.55)';
-  box.classList.add('show');
-  clearTimeout(window.__toastTimer);
-  window.__toastTimer = setTimeout(() => box.classList.remove('show'), 2800);
-}
-function escapeHtml(str = '') {
-  return String(str).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
-}
-function formatSize(bytes = 0) {
-  if (!bytes) return '';
-  const units = ['B','KB','MB','GB'];
-  let n = Number(bytes), i = 0;
-  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-  return `${n.toFixed(n >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
-}
-function isImage(item) {
-  const n = (item.name || '').toLowerCase();
-  return /\.(png|jpe?g|webp|gif|bmp|avif)$/.test(n) || /^image\//.test(item.mime || '');
-}
-async function api(path, options = {}) {
-  const res = await fetch(path, options);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.status === 0) throw data;
+async function api(path, opts={}){
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(()=>({status:0,msg:'Không đọc được phản hồi server'}));
+  if(!res.ok) throw data;
   return data;
 }
-function setFolder(id, name) {
-  state.folderId = String(id || '0');
-  state.folderName = name || 'Root';
-  $('#currentFolderName').textContent = state.folderName;
-  $('#uploadPid').value = state.folderId;
-  $('#folderPid').value = state.folderId;
-  $('#folderSelect').value = state.folderId;
+
+function setSelects(){
+  const html = folderOptions.map(f=>`<option value="${esc(f.id)}">${esc(f.name)}</option>`).join('');
+  folderSelects.forEach(sel=>{ sel.innerHTML = html; sel.value = currentFolder.id; });
 }
-function renderFolderOptions() {
-  const select = $('#folderSelect');
-  const unique = new Map();
-  unique.set('0', { id: '0', name: 'Root' });
-  state.folders.forEach(f => unique.set(String(f.id), f));
-  select.innerHTML = [...unique.values()].map(f => `<option value="${escapeHtml(f.id)}">📁 ${escapeHtml(f.name)}${f.id === '0' ? ' - ngoài cùng' : ''}</option>`).join('');
-  select.value = state.folderId;
+function rememberFolders(list){
+  const map = new Map(folderOptions.map(f=>[String(f.id), f]));
+  for(const it of list){ if(it.folder && it.id) map.set(String(it.id), {id:String(it.id), name:'📁 '+it.name}); }
+  folderOptions = [...map.values()]; setSelects();
 }
-async function loadFolders() {
-  try {
-    const data = await api('/api/folders?pid=0&name=');
-    const folders = Array.isArray(data.folders) ? data.folders.filter(f => f.id) : [];
-    state.folders = [{ id: '0', name: 'Root' }, ...folders];
-    renderFolderOptions();
-    $('#statusText').textContent = folders.length ? `Đã tải ${folders.length} thư mục. Không cần nhập ID nữa.` : 'Đã kết nối. Nếu chưa thấy folder, hãy tạo folder mới hoặc dùng tab File để tìm.';
-    log(data);
-  } catch (err) {
-    $('#statusText').textContent = 'Không tải được folder. Xem log kỹ thuật để biết lỗi.';
-    toast(err.msg || 'Không tải được folder', 'bad');
-    log(err);
-  }
+function renderCrumbs(){
+  $('#currentFolderName').textContent = '📁 ' + currentFolder.name;
+  $('#crumbs').innerHTML = historyStack.map((f,i)=>`<button data-idx="${i}">${i===0?'Root':esc(f.name)}</button>`).join('');
+  $('#crumbs').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    const idx = Number(b.dataset.idx); historyStack = historyStack.slice(0, idx+1); openFolder(historyStack[idx].id, historyStack[idx].name, false);
+  });
 }
-async function checkHealth() {
-  try {
-    const data = await api('/api/health');
-    $('#statusText').textContent = data.tokenConfigured ? 'Đã kết nối server. Đang tải folder...' : 'Chưa có token.';
-    log(data);
-  } catch (err) {
-    $('#statusText').textContent = 'Không gọi được server Node.js.';
-    log(err);
-  }
+
+async function openFolder(id='0', name='Root', push=true){
+  currentFolder = { id:String(id||0), name:name||'Root' };
+  if(push){ const last=historyStack[historyStack.length-1]; if(String(last.id)!==String(id)) historyStack.push(currentFolder); }
+  renderCrumbs(); setSelects(); itemsBox.innerHTML = '<p class="muted">Đang tải...</p>';
+  try{
+    const data = await api('/api/folder/'+encodeURIComponent(currentFolder.id));
+    const list = data.list || [];
+    rememberFolders(list);
+    renderItems(list);
+    log({msg:'Đã tải thư mục', folder:currentFolder, count:list.length});
+  }catch(e){ itemsBox.innerHTML='<p class="muted">Không tải được thư mục. Có thể TeleBox không cho liệt kê root bằng API search rỗng. Bạn vẫn có thể tạo thư mục/upload, hoặc bấm Kiểm tra API.</p>'; log(e); }
 }
-function renderResults(items = []) {
-  const box = $('#results');
-  if (!items.length) {
-    box.innerHTML = '<div class="empty">Chưa có kết quả. Hãy nhập từ khóa rồi bấm Tìm.</div>';
-    return;
-  }
-  box.innerHTML = items.map(item => {
-    const icon = item.isFolder ? '📁' : (isImage(item) ? '🖼️' : '📄');
-    const img = item.cover && isImage(item) ? `<img src="${escapeHtml(item.cover)}" alt="">` : `<span class="big-icon">${icon}</span>`;
-    const id = escapeHtml(item.id || '');
-    const name = escapeHtml(item.name || 'Không tên');
-    const size = formatSize(item.size);
-    return `<article class="file-card">
-      <div class="thumb">${img}</div>
-      <div class="file-name">${name}</div>
-      <div class="meta"><span>${item.isFolder ? 'Folder' : 'File'}</span>${size ? `<span>• ${size}</span>` : ''}<span>• ID: ${id}</span></div>
+
+function renderItems(list){
+  if(!list.length){ itemsBox.innerHTML='<p class="muted">Thư mục này đang trống.</p>'; return; }
+  itemsBox.innerHTML = list.map(it=>{
+    const icon = it.folder ? '📁' : (it.image ? '🖼️' : '📄');
+    const thumb = it.image && it.thumb ? `<img src="${esc(it.thumb)}" onerror="this.remove()">` : icon;
+    return `<article class="item">
+      <div class="thumb">${thumb}</div>
+      <div>
+        <h3>${esc(it.name)}</h3>
+        <div class="meta">
+          <span>${it.folder?'Thư mục':'File'}</span>
+          ${it.size?`<span>${esc(fmtSize(it.size))}</span>`:''}
+          <span>ID: ${esc(it.id)}</span>
+        </div>
+      </div>
       <div class="actions">
-        ${item.isFolder ? `<button data-open-folder="${id}" data-name="${name}">Mở</button>` : ''}
-        <button data-share="${id}" data-kind="${item.isFolder ? 'folder' : 'file'}">Share</button>
-        ${!item.isFolder ? `<button data-rename="${id}" data-name="${name}">Đổi tên</button>` : ''}
-        <button data-delete="${id}" data-kind="${item.isFolder ? 'folder' : 'file'}">Xóa</button>
+        ${it.folder?`<button data-open="${esc(it.id)}" data-name="${esc(it.name)}">Mở</button>`:''}
+        <button data-share="${esc(it.id)}" data-folder="${it.folder?1:0}">Share</button>
+        ${!it.folder?`<button data-rename="${esc(it.id)}" data-name="${esc(it.name)}">Đổi tên</button>`:''}
+        <button class="danger" data-del="${esc(it.id)}" data-folder="${it.folder?1:0}">Xóa</button>
       </div>
     </article>`;
   }).join('');
-}
-async function searchFiles(keyword = '') {
-  try {
-    $('#results').innerHTML = '<div class="empty">Đang tải...</div>';
-    const qs = new URLSearchParams({ name: keyword, pid: state.folderId, pageNo: 1, pageSize: 100 });
-    const data = await api('/api/search?' + qs.toString());
-    renderResults(data.items || []);
-    log(data);
-  } catch (err) {
-    $('#results').innerHTML = '<div class="empty">Lỗi khi tìm kiếm. Mở log kỹ thuật để xem chi tiết.</div>';
-    toast(err.msg || 'Tìm kiếm lỗi', 'bad');
-    log(err);
-  }
-}
-async function shareItem(kind, id) {
-  try {
-    const url = kind === 'folder' ? `/api/folder/${encodeURIComponent(id)}/share` : `/api/file/${encodeURIComponent(id)}/share`;
-    const data = await api(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ expire_enum: 4 }) });
-    const link = data.shareUrl || data?.data?.shareToken || '';
-    if (link && navigator.clipboard) await navigator.clipboard.writeText(link);
-    toast(link ? 'Đã tạo share và copy link/token' : 'Đã tạo share');
-    log(data);
-  } catch (err) { toast(err.msg || 'Share lỗi', 'bad'); log(err); }
-}
-async function deleteItem(kind, id) {
-  if (!confirm(`Xóa ${kind === 'folder' ? 'folder' : 'file'} ID ${id}?`)) return;
-  try {
-    const url = kind === 'folder' ? `/api/folder/${encodeURIComponent(id)}` : `/api/file/${encodeURIComponent(id)}`;
-    const data = await api(url, { method:'DELETE' });
-    toast('Đã xóa');
-    log(data);
-    searchFiles($('#searchInput').value.trim());
-    loadFolders();
-  } catch (err) { toast(err.msg || 'Xóa lỗi', 'bad'); log(err); }
-}
-async function renameFile(id, oldName) {
-  const name = prompt('Tên mới:', oldName || '');
-  if (!name) return;
-  try {
-    const data = await api(`/api/file/${encodeURIComponent(id)}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
-    toast('Đã đổi tên');
-    log(data);
-    searchFiles($('#searchInput').value.trim());
-  } catch (err) { toast(err.msg || 'Đổi tên lỗi', 'bad'); log(err); }
+  itemsBox.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openFolder(b.dataset.open,b.dataset.name,true));
+  itemsBox.querySelectorAll('[data-share]').forEach(b=>b.onclick=()=>shareItem(b.dataset.share,b.dataset.folder==='1'));
+  itemsBox.querySelectorAll('[data-rename]').forEach(b=>b.onclick=()=>renameFile(b.dataset.rename,b.dataset.name));
+  itemsBox.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>deleteItem(b.dataset.del,b.dataset.folder==='1'));
 }
 
-$$('.tab').forEach(btn => btn.addEventListener('click', () => {
-  $$('.tab').forEach(b => b.classList.remove('active'));
-  $$('.panel').forEach(p => p.classList.remove('active'));
-  btn.classList.add('active');
-  $('#' + btn.dataset.tab).classList.add('active');
-  if (btn.dataset.tab === 'files') searchFiles($('#searchInput').value.trim());
-}));
+async function shareItem(id,isFolder){
+  try{
+    const data = await api(`/api/${isFolder?'folder':'file'}/${encodeURIComponent(id)}/share`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expire_enum:4})});
+    log(data); toast('Đã tạo link share');
+  }catch(e){ log(e); toast('Share lỗi'); }
+}
+async function renameFile(id,oldName){
+  const name = prompt('Tên file mới:', oldName||''); if(!name) return;
+  try{ const data = await api('/api/file/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}); log(data); toast('Đã đổi tên'); openFolder(currentFolder.id,currentFolder.name,false); }
+  catch(e){ log(e); toast('Đổi tên lỗi'); }
+}
+async function deleteItem(id,isFolder){
+  if(!confirm(`Xóa ${isFolder?'thư mục':'file'} này?`)) return;
+  try{ const data = await api(`/api/${isFolder?'folder':'file'}/`+encodeURIComponent(id),{method:'DELETE'}); log(data); toast('Đã xóa'); openFolder(currentFolder.id,currentFolder.name,false); }
+  catch(e){ log(e); toast('Xóa lỗi'); }
+}
 
-$('#folderSelect').addEventListener('change', (e) => {
-  const opt = e.target.selectedOptions[0];
-  const name = opt.textContent.replace(/^📁\s*/, '').replace(' - ngoài cùng', '');
-  setFolder(e.target.value, name);
-  toast(`Đã chọn: ${name}`);
+$('#fileInput').addEventListener('change', e=>{
+  const files=[...e.target.files]; $('#fileText').textContent = files.length ? files.map(f=>f.name).join(', ') : 'Chưa chọn file nào';
 });
-$('#refreshBtn').addEventListener('click', async () => { await loadFolders(); await searchFiles($('#searchInput').value.trim()); });
-$('#fileInput').addEventListener('change', (e) => {
-  const file = e.target.files?.[0];
-  $('#fileNameText').textContent = file ? file.name : 'Chạm để chọn file';
-  if (file && !$('#diyNameInput').value) $('#diyNameInput').value = file.name;
-});
-$('#uploadForm').addEventListener('submit', async (e) => {
+$('#uploadForm').addEventListener('submit', async e=>{
   e.preventDefault();
-  const fd = new FormData(e.currentTarget);
-  const bar = $('#progressBar');
-  $('#progressWrap').classList.remove('hidden');
-  bar.style.width = '12%';
-  $('#progressText').textContent = 'Đang chuẩn bị upload...';
-  try {
-    bar.style.width = '45%';
-    $('#progressText').textContent = 'Đang gửi file lên TeleBox...';
-    const data = await api('/api/upload', { method:'POST', body: fd });
-    bar.style.width = '100%';
-    $('#progressText').textContent = 'Upload xong';
-    toast('Upload thành công');
-    log(data);
-    e.currentTarget.reset();
-    $('#fileNameText').textContent = 'Chạm để chọn file';
-    $('#uploadPid').value = state.folderId;
-    setTimeout(() => $('#progressWrap').classList.add('hidden'), 1200);
-  } catch (err) {
-    $('#progressText').textContent = 'Upload lỗi';
-    toast(err.msg || 'Upload lỗi', 'bad');
-    log(err);
-  }
+  const progress=$('#uploadProgress'); progress.classList.remove('hidden'); progress.firstElementChild.style.width='35%';
+  try{
+    const fd=new FormData(e.currentTarget); if(!fd.get('pid')) fd.set('pid', currentFolder.id);
+    log('Đang upload...');
+    const data=await api('/api/upload',{method:'POST',body:fd}); progress.firstElementChild.style.width='100%'; log(data); toast(data.msg||'Upload xong'); e.currentTarget.reset(); $('#fileText').textContent='Chưa chọn file nào'; openFolder(currentFolder.id,currentFolder.name,false);
+  }catch(err){ log(err); toast('Upload lỗi'); }
+  setTimeout(()=>{progress.classList.add('hidden'); progress.firstElementChild.style.width='0'},900);
 });
-$('#folderForm').addEventListener('submit', async (e) => {
+$('#folderForm').addEventListener('submit', async e=>{
   e.preventDefault();
-  const body = Object.fromEntries(new FormData(e.currentTarget));
-  try {
-    const data = await api('/api/folder', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    toast('Đã tạo thư mục');
-    log(data);
-    e.currentTarget.reset();
-    $('#folderPid').value = state.folderId;
-    await loadFolders();
-  } catch (err) { toast(err.msg || 'Tạo folder lỗi', 'bad'); log(err); }
+  try{ const body=Object.fromEntries(new FormData(e.currentTarget)); const data=await api('/api/folder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); log(data); toast('Đã tạo thư mục'); e.currentTarget.reset(); openFolder(currentFolder.id,currentFolder.name,false); }
+  catch(err){ log(err); toast(err?.msg || 'Tạo thư mục lỗi'); }
 });
-$('#searchForm').addEventListener('submit', (e) => { e.preventDefault(); searchFiles($('#searchInput').value.trim()); });
-$('#results').addEventListener('click', (e) => {
-  const btn = e.target.closest('button');
-  if (!btn) return;
-  if (btn.dataset.openFolder) { setFolder(btn.dataset.openFolder, btn.dataset.name || 'Folder'); searchFiles(''); }
-  if (btn.dataset.share) shareItem(btn.dataset.kind, btn.dataset.share);
-  if (btn.dataset.rename) renameFile(btn.dataset.rename, btn.dataset.name);
-  if (btn.dataset.delete) deleteItem(btn.dataset.kind, btn.dataset.delete);
+$('#searchForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const form=Object.fromEntries(new FormData(e.currentTarget));
+  try{ const qs=new URLSearchParams({name:form.name||'',pid:currentFolder.id,pageNo:1,pageSize:80}); const data=await api('/api/search?'+qs); renderItems(data.list||[]); log(data); }
+  catch(err){ log(err); toast('Tìm kiếm lỗi'); }
 });
-$('#shareForm').addEventListener('submit', async (e) => {
-  e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); await shareItem(f.kind, f.id);
-});
-$('#renameForm').addEventListener('submit', async (e) => {
-  e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); await renameFile(f.id, f.name);
-});
-$('#deleteForm').addEventListener('submit', async (e) => {
-  e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); await deleteItem(f.kind, f.id);
-});
-$('#toggleLog').addEventListener('click', () => {
-  $('#log').classList.toggle('hidden');
-  $('#toggleLog').textContent = $('#log').classList.contains('hidden') ? 'Hiện log kỹ thuật' : 'Ẩn log kỹ thuật';
-});
+$('#refreshBtn').onclick=()=>openFolder(currentFolder.id,currentFolder.name,false);
+const diagBtn = document.createElement('button');
+diagBtn.type = 'button'; diagBtn.className = 'ghost'; diagBtn.textContent = '🧪 Kiểm tra API';
+diagBtn.onclick = async()=>{ try{ log('Đang kiểm tra API...'); const d=await api('/api/diagnose'); log(d); toast('Đã kiểm tra API'); }catch(e){ log(e); toast('Kiểm tra API lỗi'); } };
+document.querySelector('.toolbar')?.appendChild(diagBtn);
+$('#openCurrentBtn').onclick=()=>openFolder(currentFolder.id,currentFolder.name,false);
+$('#goRootBtn').onclick=()=>{historyStack=[{id:'0',name:'Root'}]; openFolder('0','Root',false)};
 
-(async function init(){
-  renderResults([]);
-  renderFolderOptions();
-  await checkHealth();
-  await loadFolders();
-})();
+openFolder('0','Root',false);

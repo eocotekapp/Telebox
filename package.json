@@ -1,8 +1,7 @@
 {
-  "name": "telebox-drive-working",
+  "name": "telebox-api-sharetest",
   "version": "1.0.0",
   "type": "module",
-  "scripts": {"start":"node server.js"},
-  "dependencies": {"formidable":"^3.5.2"},
-  "engines": {"node":">=18"}
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
 }

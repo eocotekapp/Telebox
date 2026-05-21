@@ -2,77 +2,79 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>TeleBox Drive Easy</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TeleBox API Tester</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <main class="app">
-    <header class="hero">
-      <div>
-        <p class="eyebrow">TeleBox Drive</p>
-        <h1>Kho lưu trữ dễ dùng</h1>
-        <p class="sub">Chọn thư mục, upload ảnh/file, tạo thư mục và chia sẻ chỉ bằng vài nút bấm.</p>
-      </div>
-      <button id="refreshBtn" class="round" title="Tải lại">↻</button>
-    </header>
+    <section class="hero">
+      <div class="badge">TELEBOX API TESTER</div>
+      <h1>Kiểm tra token & API thật</h1>
+      <p>Dùng để test riêng trước khi build web lưu trữ. Mỗi nút sẽ trả log raw từ TeleBox.</p>
+      <div id="config" class="config">Đang tải cấu hình...</div>
+    </section>
 
-    <section class="card current">
-      <div class="row between">
-        <div>
-          <span class="label">Đang ở thư mục</span>
-          <h2 id="currentFolderName">📁 Root</h2>
-        </div>
-        <button id="goRootBtn" class="ghost">Root</button>
-      </div>
-      <div id="crumbs" class="crumbs"></div>
+    <section class="card quick">
+      <h2>Test nhanh</h2>
+      <button onclick="runAll()">🧪 Chạy test tổng hợp</button>
+      <button onclick="testFolderDetails()">📁 Test folder_details root</button>
+      <button onclick="testSearch()">🔎 Test search root</button>
     </section>
 
     <section class="card">
-      <h2>⬆️ Upload file</h2>
-      <form id="uploadForm" class="stack">
-        <label class="label">Lưu vào thư mục</label>
-        <select name="pid" id="uploadFolder"></select>
-        <label class="filePick">
-          <input type="file" name="files" id="fileInput" multiple />
-          <span>📎 Chọn file / ảnh</span>
-          <small id="fileText">Chưa chọn file nào</small>
-        </label>
-        <input name="diyName" placeholder="Tên lưu mới, bỏ trống để giữ tên gốc" />
-        <button class="primary" type="submit">Upload ngay</button>
-        <div id="uploadProgress" class="progress hidden"><div></div></div>
-      </form>
+      <h2>Tạo folder test</h2>
+      <label>Tên folder</label>
+      <input id="folderName" value="test123" />
+      <label>Folder cha</label>
+      <input id="folderPid" value="0" inputmode="numeric" />
+      <label>Method</label>
+      <select id="folderMethod">
+        <option>GET</option>
+        <option>POST</option>
+      </select>
+      <button onclick="createFolder()">➕ Tạo folder test</button>
     </section>
 
     <section class="card">
-      <h2>📁 Tạo thư mục</h2>
-      <form id="folderForm" class="stack">
-        <label class="label">Tạo trong</label>
-        <select name="pid" id="createFolderParent"></select>
-        <input name="name" required placeholder="Ví dụ: Ảnh món ăn" />
-        <button class="primary" type="submit">Tạo thư mục</button>
-      </form>
+      <h2>Upload file test nhanh</h2>
+      <p class="hint">Tạo file .txt nhỏ trong server rồi upload lên TeleBox. Không cần chọn file.</p>
+      <label>Folder đích</label>
+      <input id="uploadPid" value="0" inputmode="numeric" />
+      <label>Tên file</label>
+      <input id="uploadName" value="telebox-test.txt" />
+      <label>Nội dung file test</label>
+      <textarea id="uploadContent">Hello TeleBox API tester</textarea>
+      <button onclick="uploadText()">⬆️ Upload file text test</button>
     </section>
 
     <section class="card">
-      <div class="row between">
-        <h2>🗂️ File & thư mục</h2>
-        <button id="openCurrentBtn" class="ghost">Tải lại</button>
+      <h2>Upload file thật</h2>
+      <label>Folder đích</label>
+      <input id="realPid" value="0" inputmode="numeric" />
+      <label>Chọn file</label>
+      <input id="realFile" type="file" />
+      <label>Tên lưu trên TeleBox (bỏ trống = giữ tên gốc)</label>
+      <input id="realName" placeholder="vd: anh-test.jpg" />
+      <button onclick="uploadRealFile()">📤 Upload file đã chọn</button>
+    </section>
+
+    <section class="card">
+      <h2>Share folder</h2>
+      <label>Folder ID</label>
+      <input id="shareDirId" placeholder="vd: 123456" inputmode="numeric" />
+      <button onclick="shareFolder()">🔗 Tạo link share folder</button>
+    </section>
+
+    <section class="card log-card">
+      <div class="log-head">
+        <h2>Log kỹ thuật</h2>
+        <button class="ghost" onclick="clearLog()">Xoá log</button>
       </div>
-      <form id="searchForm" class="search">
-        <input name="name" placeholder="Tìm ảnh, file, folder..." />
-        <button type="submit">Tìm</button>
-      </form>
-      <div id="items" class="items"></div>
-    </section>
-
-    <section class="card logCard">
-      <h2>📋 Trạng thái</h2>
-      <pre id="log">Sẵn sàng.</pre>
+      <pre id="log">Chưa có log.</pre>
     </section>
   </main>
 
-  <div id="toast" class="toast"></div>
   <script src="/app.js"></script>
 </body>
 </html>

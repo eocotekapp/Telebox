@@ -1,17 +1,9 @@
 {
-  "name": "telebox-api-tester",
+  "name": "telebox-api-realtest",
   "version": "1.0.0",
   "type": "module",
-  "private": true,
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node server.js"
   },
-  "dependencies": {
-    "express": "^4.19.2",
-    "formidable": "^3.5.1"
-  },
-  "engines": {
-    "node": ">=18"
-  }
+  "engines": { "node": ">=18" }
 }

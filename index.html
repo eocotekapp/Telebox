@@ -1,14 +1,121 @@
-<!doctype html><html lang="vi"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>TeleBox API Share Test</title>
-<style>:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#08101f;color:#eef5ff}body{margin:0;padding:18px}.wrap{max-width:920px;margin:auto}.card{background:linear-gradient(180deg,#17243f,#101827);border:1px solid #2d4169;border-radius:22px;padding:18px;margin:14px 0;box-shadow:0 18px 50px #0006}h1{font-size:28px;margin:0 0 8px}.muted{color:#aab7d5;line-height:1.45}button{border:0;border-radius:16px;padding:14px 16px;font-weight:800;background:#60d9ff;color:#03111d;margin:6px 6px 6px 0;font-size:15px}.green{background:#61f29a}.orange{background:#ffd36a}input,select{width:100%;box-sizing:border-box;background:#071225;color:#fff;border:1px solid #2d4169;border-radius:14px;padding:14px;margin:8px 0 12px;font-size:16px}pre{white-space:pre-wrap;word-break:break-word;background:#020815;border:1px solid #263a62;border-radius:16px;padding:14px;min-height:180px}.ok{color:#7dffae}.bad{color:#ff8ea1}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.grid{grid-template-columns:1fr}}</style></head>
-<body><div class="wrap">
-<div class="card"><h1>TeleBox API Share Test</h1><div class="muted">Bản này thêm test <b>file_share</b>. Dán ID file rồi bấm tạo share hoặc tạo share + quét trang share để tìm direct/CDN URL.</div></div>
-<div class="card"><div class="grid"><div><label>Folder ID để lấy danh sách</label><input id="pid" value="0"></div><div><label>Tên folder test</label><input id="name" value="test123"></div></div><button onclick="run('search')">🔎 File search</button><button onclick="run('all')">🧪 Test tổng hợp</button><button onclick="run('create')">➕ Tạo folder</button><div id="status" class="muted">Chưa chạy.</div></div>
-<div class="card"><h2>Test share file</h2><div class="muted">Lấy <b>id</b> trong danh sách file, ví dụ <code>425831</code>, dán vào đây. Không dùng <code>item_id</code> dạng <code>fp...</code> cho endpoint share.</div><div class="grid"><div><label>File ID / itemIds</label><input id="itemId" placeholder="VD: 425831"></div><div><label>Thời hạn share</label><select id="expire"><option value="4">Vĩnh viễn</option><option value="3">30 ngày</option><option value="2">7 ngày</option><option value="1">24 giờ</option></select></div></div><button class="green" onclick="run('share')">🔗 Test API share file</button><button class="orange" onclick="run('shareAndProbe')">🧲 Share + quét direct URL</button><label>ShareToken nếu đã có</label><input id="shareToken" placeholder="VD: YNpN123"><button onclick="run('probeShare')">🕵️ Quét trang share bằng shareToken</button></div>
-<div class="card"><pre id="out">Log sẽ hiện ở đây.</pre></div>
-</div><script>
-async function run(action){
- const qs=new URLSearchParams(); qs.set('action',action); qs.set('pid',document.getElementById('pid').value.trim()||'0'); qs.set('name',document.getElementById('name').value.trim()||('test_'+Date.now())); qs.set('itemId',document.getElementById('itemId').value.trim()); qs.set('expire',document.getElementById('expire').value); qs.set('shareToken',document.getElementById('shareToken').value.trim());
- const out=document.getElementById('out'), st=document.getElementById('status'); st.textContent='Đang gọi /api/test...'; out.textContent='Loading...';
- try{ const r=await fetch('/api/test?'+qs.toString(),{cache:'no-store'}); const text=await r.text(); st.innerHTML=r.ok?'<span class="ok">HTTP '+r.status+'</span>':'<span class="bad">HTTP '+r.status+'</span>'; try{ const json=JSON.parse(text); out.textContent=JSON.stringify(json,null,2); const token=json?.results?.find(x=>x.shareToken)?.shareToken || json?.results?.[0]?.body?.data?.shareToken; if(token) document.getElementById('shareToken').value=token; }catch{out.textContent=text;} }catch(e){ st.innerHTML='<span class="bad">Fetch lỗi</span>'; out.textContent=String(e); }
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>TeleBox Share API + Lấy ID</title>
+<style>
+:root{--bg:#071021;--card:#111d35cc;--card2:#0b1428;--line:#263a67;--txt:#f2f7ff;--muted:#a9b7d6;--accent:#67d7ff;--ok:#71f29b;--bad:#ff6d8e;--warn:#ffd36a}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#20386b 0,#091222 38%,#050914 100%);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;color:var(--txt);font-size:16px}button,input,select{font:inherit} .wrap{max-width:980px;margin:auto;padding:18px 14px 90px}.hero,.card{background:linear-gradient(145deg,#162746cc,#11182acc);border:1px solid var(--line);box-shadow:0 16px 50px #0008;border-radius:26px;padding:20px;margin:14px 0}.hero h1{margin:0 0 8px;font-size:30px}.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}input,select{width:100%;background:#071126;color:var(--txt);border:1px solid #2a3c67;border-radius:16px;padding:14px 15px;outline:none}label{display:block;color:var(--muted);margin:12px 0 6px}.btn{border:0;border-radius:18px;padding:14px 16px;font-weight:800;background:linear-gradient(135deg,#38b8ff,#80ecff);color:#061122;box-shadow:0 8px 24px #1aaeff38}.btn.secondary{background:#10192d;color:var(--txt);border:1px solid #324872}.btn.green{background:linear-gradient(135deg,#29de72,#9af9c2)}.btn.red{background:#2a101b;color:#ffd7df;border:1px solid #7a3148}.btn:disabled{opacity:.45}.toolbar{position:sticky;top:0;z-index:5;background:linear-gradient(#091222 70%,#09122200);padding-top:8px}.crumb{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.chip{background:#10192e;border:1px solid #31486f;border-radius:999px;padding:10px 14px;font-weight:800}.list{display:grid;gap:12px}.item{display:grid;grid-template-columns:70px 1fr;gap:12px;align-items:center;background:#071126cc;border:1px solid #263a67;border-radius:22px;padding:12px}.thumb{width:70px;height:70px;border-radius:18px;background:#13243f;display:grid;place-items:center;overflow:hidden;font-size:30px}.thumb img{width:100%;height:100%;object-fit:cover}.name{font-size:18px;font-weight:900;word-break:break-word}.meta{color:var(--muted);font-size:13px;margin:5px 0 10px;word-break:break-all}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions .btn{padding:11px 13px;border-radius:14px}.log{white-space:pre-wrap;word-break:break-word;background:#030915;border:1px solid #283d68;border-radius:18px;padding:14px;max-height:55vh;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}.status{font-weight:900;margin:8px 0}.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.linkbox{background:#061022;border:1px dashed #3d5b8e;border-radius:16px;padding:12px;margin:8px 0;word-break:break-all}.small{font-size:13px}.tabs{display:flex;gap:8px;overflow:auto;margin:12px 0}.tabs button{white-space:nowrap}.hide{display:none}@media(max-width:680px){.grid{grid-template-columns:1fr}.hero h1{font-size:25px}.wrap{padding-left:10px;padding-right:10px}.item{grid-template-columns:58px 1fr}.thumb{width:58px;height:58px}.btn{width:auto}.actions .btn{font-size:14px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <h1>TeleBox Share API + Lấy ID</h1>
+    <div class="muted">Bản này giữ mục test API share file, đồng thời có UI danh sách file để lấy ID tự động. Bấm vào folder để mở, bấm file để share/test direct.</div>
+  </div>
+
+  <div class="toolbar card">
+    <div class="grid">
+      <div><label>Folder hiện tại / pid</label><input id="pid" value="0"></div>
+      <div><label>Tìm tên file/thư mục</label><input id="name" placeholder="Để trống = toàn bộ"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" onclick="loadList()">📂 Tải danh sách</button>
+      <button class="btn secondary" onclick="goRoot()">Root</button>
+      <button class="btn secondary" onclick="health()">🧪 Test token</button>
+    </div>
+    <div id="status" class="status warn">Chưa tải danh sách</div>
+    <div class="crumb" id="crumb"></div>
+  </div>
+
+  <div class="card">
+    <h2>Test API Share thủ công</h2>
+    <div class="muted">Dùng khi bạn muốn tự dán ID. API theo tài liệu: <b>/file_share</b> với <b>itemIds</b>, <b>expire_enum</b>, <b>token</b>.</div>
+    <div class="grid">
+      <div><label>File ID / itemIds</label><input id="manualId" placeholder="Ví dụ: 425831"></div>
+      <div><label>Thời hạn share</label><select id="expire"><option value="4">Vĩnh viễn</option><option value="1">24 giờ</option><option value="2">7 ngày</option><option value="3">30 ngày</option></select></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn green" onclick="shareManual(false)">🔗 Test share file</button>
+      <button class="btn" onclick="shareManual(true)">🧲 Share + quét direct</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Danh sách file/folder</h2>
+    <div id="list" class="list"></div>
+  </div>
+
+  <div class="card">
+    <h2>Kết quả / Log API</h2>
+    <div id="links"></div>
+    <pre id="log" class="log">{}</pre>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let stack=[{id:'0',name:'Root'}];
+function fmtBytes(n){n=Number(n||0); if(!n)return '0 B'; const u=['B','KB','MB','GB','TB']; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++} return n.toFixed(n>=10||i==0?0:1)+' '+u[i];}
+function icon(x){ if(x.type==='dir'||x.type==='sdir')return '📁'; if(x.type==='pic')return '🖼️'; if(x.type==='video')return '🎬'; if(['zip','rar','apk','ipa','pdf'].includes(x.sub_type))return '📦'; return '📄';}
+function setLog(o){$('log').textContent=JSON.stringify(o,null,2)}
+function setStatus(t,c='warn'){$('status').className='status '+c;$('status').textContent=t}
+function updateCrumb(){ $('crumb').innerHTML=stack.map((x,i)=>`<button class="chip" onclick="jump(${i})">${escapeHtml(x.name)}</button>`).join('<span class="muted">›</span>'); }
+function escapeHtml(s){return String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))}
+async function api(params){ const r=await fetch('/api/tbox?'+new URLSearchParams(params)); const j=await r.json(); return {http:r.status,json:j}; }
+async function health(){setStatus('Đang test token...'); const r=await api({action:'health'}); setLog(r.json); setStatus(r.http===200?'Token/API route OK':'Lỗi API route',r.http===200?'ok':'bad')}
+function goRoot(){stack=[{id:'0',name:'Root'}]; $('pid').value='0'; updateCrumb(); loadList();}
+function jump(i){stack=stack.slice(0,i+1); $('pid').value=stack[i].id; updateCrumb(); loadList();}
+async function openFolder(id,name){stack.push({id:String(id),name:name||String(id)}); $('pid').value=id; updateCrumb(); await loadList();}
+async function loadList(){
+  const pid=$('pid').value.trim()||'0'; const name=$('name').value.trim(); setStatus('Đang tải danh sách...'); $('list').innerHTML='';
+  const r=await api({action:'list',pid,name,pageNo:'1',pageSize:'100'}); setLog(r.json);
+  const body=r.json?.result?.body; const arr=body?.data?.list||[];
+  if(!body||body.status!==1){setStatus('Tải danh sách lỗi', 'bad'); return;}
+  setStatus(`Đã tải ${arr.length} mục từ pid=${pid}`,'ok');
+  renderList(arr);
 }
-</script></body></html>
+function renderList(arr){
+  $('list').innerHTML = arr.map(x=>{
+    const isDir=x.type==='dir'||x.type==='sdir'; const cover=x.cover||'';
+    const thumb=cover?`<img src="${escapeHtml(cover)}" onerror="this.parentNode.textContent='${icon(x)}'">`:icon(x);
+    return `<div class="item">
+      <div class="thumb">${thumb}</div>
+      <div>
+        <div class="name">${escapeHtml(x.name)}</div>
+        <div class="meta">${isDir?'Folder':'File'} · id: <b>${x.id}</b> · item_id: ${escapeHtml(x.item_id||'-')} · ${fmtBytes(x.size)} · type: ${escapeHtml(x.type||'')}</div>
+        <div class="actions">
+          ${isDir?`<button class="btn" onclick="openFolder('${x.id}','${escapeAttr(x.name)}')">📂 Mở folder</button>`:`<button class="btn green" onclick="shareFile('${x.id}',false)">🔗 Test share</button><button class="btn" onclick="shareFile('${x.id}',true)">🧲 Share + quét direct</button>`}
+          <button class="btn secondary" onclick="copyText('${x.id}')">📋 Copy ID</button>
+          ${x.item_id?`<button class="btn secondary" onclick="copyText('${escapeAttr(x.item_id)}')">Copy item_id</button>`:''}
+          ${cover?`<button class="btn secondary" onclick="window.open('${escapeAttr(cover)}','_blank')">🖼 Preview</button>`:''}
+        </div>
+      </div>
+    </div>`
+  }).join('') || '<div class="muted">Không có file/folder</div>';
+}
+function escapeAttr(s){return String(s??'').replace(/[\\'"<>]/g,'')}
+async function copyText(t){await navigator.clipboard.writeText(t); setStatus('Đã copy: '+t,'ok')}
+async function shareManual(scan){ const id=$('manualId').value.trim(); if(!id){setStatus('Bạn chưa nhập File ID','bad');return} await shareFile(id,scan); }
+async function shareFile(id,scan){
+  $('manualId').value=id; $('links').innerHTML=''; setStatus(scan?'Đang share + quét direct...':'Đang gọi API file_share...');
+  const action=scan?'shareScan':'share'; const expire=$('expire').value;
+  const r=await api({action,itemIds:id,expire_enum:expire}); setLog(r.json);
+  const token=r.json.shareToken; const urls=[];
+  if(r.json.possibleShareUrls) urls.push(...r.json.possibleShareUrls.map(u=>({type:'share',url:u})));
+  if(r.json.shareUrls) urls.push(...r.json.shareUrls.map(u=>({type:'share',url:u})));
+  if(r.json.scan?.urls) urls.push(...r.json.scan.urls);
+  showLinks(token,urls);
+  setStatus(r.json.ok ? (token?'Share API chạy, token: '+token:'API chạy nhưng chưa có shareToken') : 'Share lỗi', r.json.ok?'ok':'bad');
+}
+function showLinks(token,urls){
+  let html=''; if(token) html+=`<div class="linkbox"><b>shareToken:</b> ${escapeHtml(token)} <button class="btn secondary small" onclick="copyText('${escapeAttr(token)}')">Copy</button></div>`;
+  if(urls.length){ html+=urls.map((x,i)=>`<div class="linkbox"><b>${escapeHtml(x.type||'url')}</b><br>${escapeHtml(x.url)}<div class="row" style="margin-top:8px"><button class="btn secondary small" onclick="copyText('${escapeAttr(x.url)}')">Copy link</button><button class="btn small" onclick="window.open('${escapeAttr(x.url)}','_blank')">Mở</button></div></div>`).join(''); }
+  else html+='<div class="muted">Chưa tìm thấy URL. Xem log API bên dưới.</div>';
+  $('links').innerHTML=html;
+}
+updateCrumb(); loadList();
+</script>
+</body>
+</html>

@@ -10,6 +10,20 @@ function json(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
+function safeUrl(url) {
+  return url.toString().replace(TOKEN, '***TOKEN***');
+}
+
+async function readRawBody(req) {
+  let body = '';
+  await new Promise((resolve, reject) => {
+    req.on('data', c => body += c);
+    req.on('end', resolve);
+    req.on('error', reject);
+  });
+  return body;
+}
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return json(res, 200, { ok: true });
   try {
@@ -23,22 +37,22 @@ export default async function handler(req, res) {
       if (k !== 'endpoint' && k !== 'token') target.searchParams.set(k, v);
     }
 
-    let teleboxRes;
-    if (req.method === 'POST') {
-      let body = '';
-      await new Promise(resolve => {
-        req.on('data', c => body += c);
-        req.on('end', resolve);
-      });
-      teleboxRes = await fetch(target, {
-        method: 'POST',
-        headers: { 'Content-Type': req.headers['content-type'] || 'application/json' },
-        body: body || undefined
-      });
-    } else {
-      teleboxRes = await fetch(target, { method: 'GET' });
+    const method = req.method === 'POST' ? 'POST' : 'GET';
+    const headers = {
+      'Accept': 'application/json, text/plain, */*',
+      'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0',
+      'Origin': 'https://www.telebox.online',
+      'Referer': 'https://www.telebox.online/'
+    };
+
+    const options = { method, headers };
+    if (method === 'POST') {
+      const rawBody = await readRawBody(req);
+      headers['Content-Type'] = req.headers['content-type'] || 'application/json';
+      options.body = rawBody || '{}';
     }
 
+    const teleboxRes = await fetch(target, options);
     const text = await teleboxRes.text();
     let body;
     try { body = JSON.parse(text); } catch { body = text; }
@@ -47,7 +61,7 @@ export default async function handler(req, res) {
       ok: true,
       httpStatus: teleboxRes.status,
       endpoint,
-      requestUrl: target.toString().replace(TOKEN, '***TOKEN***'),
+      requestUrl: safeUrl(target),
       body
     });
   } catch (e) {
